@@ -11,13 +11,13 @@
 
 const DB_HOST = 'localhost';
 const DB_PORT = 3306;
-const DB_NAME = 'madahino_madahi';
-const DB_USER = 'madahino_user';
-const DB_PASS = '@65877856.com';
+const DB_NAME = '';
+const DB_USER = '';
+const DB_PASS = '';
 
 
 // آدرس پایه اپ (بدون اسلش انتهایی)
-const APP_BASE_URL = 'https://madahinote.ir';
+const APP_BASE_URL = '';
 
 // 'production' یا 'development' (نمایش خطاها فقط در development)
-const APP_ENV = 'production';
+const APP_ENV = '';
