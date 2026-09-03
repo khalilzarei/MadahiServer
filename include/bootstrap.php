@@ -57,6 +57,39 @@ set_exception_handler(function (Throwable $e) {
 
 require_once __DIR__ . '/DB.php';
 require_once __DIR__ . '/DB_Functions.php';
+require_once __DIR__ . '/BazaarClient.php';
+require_once __DIR__ . '/ZarinpalClient.php';
+
+// ============================================================
+// زرین‌پال — تسویه فاکتور (مشارکند webhook و چک وضعیت)
+// ============================================================
+
+function zarinpal_client(): ZarinpalClient
+{
+    return new ZarinpalClient(ZARINPAL_API_BASE, ZARINPAL_MERCHANT_ID);
+}
+
+/**
+ * اعتبارسنجی یک فاکتور در انتظار در زرین‌پال؛ اگر پرداخت شده،
+ * پرو را فعال می‌کند (idempotent). true = الان پرو فعال شد/فعال است
+ */
+function zarinpal_settle_pending_invoice(array $invoice): bool
+{
+    $result = zarinpal_client()->verify(
+        (string)$invoice['authority'],
+        (int)$invoice['amount']
+    );
+
+    if (!empty($result['success'])) {
+        (new DB_Functions())->settleZarinpalInvoice(
+            (int)$invoice['id'],
+            (string)($result['refId'] ?? '')
+        );
+        return true;
+    }
+
+    return false;
+}
 
 // polyfill برای سرورهای nginx که getallheaders ندارند
 if (!function_exists('getallheaders')) {
@@ -145,6 +178,28 @@ function rate_limit(string $key, int $maxAttempts, int $windowSeconds): void
         error_response('تعداد درخواست‌ها بیش از حد مجاز است؛ کمی بعد دوباره تلاش کنید');
     }
     $db->logRequest($key);
+}
+
+// ============================================================
+// نسخه پرو — برای endpointهای پولی
+// ============================================================
+
+/**
+ * احراز هویت + بررسی نسخه پرو را در یک قدم انجام می‌دهد.
+ * برای هر endpoint پولی فقط همین یک خط کافی است:
+ *   $user = require_premium();
+ */
+function require_premium(): array
+{
+    $user = require_auth();
+    $db   = new DB_Functions();
+    $info = $db->isPremium((int)$user['id']);
+
+    if ($info === null || empty($info['is_premium'])) {
+        error_response('این قابلیت در نسخه پرو در دسترس است');
+    }
+
+    return $user;
 }
 
 // ============================================================

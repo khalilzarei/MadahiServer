@@ -333,6 +333,95 @@ class DB_Functions
         $stmt->execute([$audioUrl, $contentId]);
     }
 
+    /**
+     * لیست شعرهایی که سبک (ویس) دارند — ویژه نسخه پرو
+     * (محتوای کاربر + محتوای مشترک با user_id = 0)
+     */
+    public function getPoemsWithAudio(int $userId): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM `contents`
+             WHERE audio_url IS NOT NULL AND audio_url <> ""
+               AND (user_id = ? OR user_id = 0)
+             ORDER BY id DESC'
+        );
+        $stmt->execute([$userId]);
+        return $stmt->fetchAll();
+    }
+
+    // ================== فاکتورهای زرین‌پال ==================
+
+    public function createPremiumInvoice(int $userId, int $amount, string $authority): void
+    {
+        $stmt = $this->db->prepare(
+            'INSERT INTO `premium_invoices` (`user_id`, `amount`, `authority`, `status`)
+             VALUES (?, ?, ?, "pending")'
+        );
+        $stmt->execute([$userId, $amount, $authority]);
+    }
+
+    /** آخرین فاکتور در انتظار پرداخت کاربر */
+    public function getPendingInvoice(int $userId): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM `premium_invoices`
+             WHERE user_id = ? AND status = "pending"
+             ORDER BY id DESC LIMIT 1'
+        );
+        $stmt->execute([$userId]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    public function findInvoiceByAuthority(string $authority): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM `premium_invoices` WHERE authority = ? LIMIT 1'
+        );
+        $stmt->execute([$authority]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    /** آخرین فاکتور (برای debug) */
+    public function dbLastInvoice(): ?array
+    {
+        $stmt = $this->db->query(
+            'SELECT * FROM `premium_invoices` ORDER BY id DESC LIMIT 1'
+        );
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    /**
+     * تسویه فاکتور: ثبت refId + فعال‌سازی پرو (idempotent)
+     */
+    public function settleZarinpalInvoice(int $invoiceId, string $refId): void
+    {
+        $stmt = $this->db->prepare(
+            'UPDATE `premium_invoices`
+             SET status = "active", ref_id = ?
+             WHERE id = ? AND status = "pending"'
+        );
+        $stmt->execute([$refId, $invoiceId]);
+
+        if ($stmt->rowCount() > 0) {
+            $stmt2 = $this->db->prepare('SELECT * FROM `premium_invoices` WHERE id = ? LIMIT 1');
+            $stmt2->execute([$invoiceId]);
+            $invoice = $stmt2->fetch();
+
+            if ($invoice) {
+                $externalRef = $refId !== '' ? $refId : (string)$invoice['authority'];
+                $this->activatePremium(
+                    (int)$invoice['user_id'],
+                    'zarinpal',
+                    $externalRef
+                );
+            }
+        }
+    }
+
+
     // ================== علاقه‌مندی‌ها ==================
 
     public function getUserFavorites(int $userId): array
@@ -341,6 +430,24 @@ class DB_Functions
         $stmt->execute([$userId]);
         return $stmt->fetchAll();
     }
+
+    /**
+     * محتواهای مورد علاقه کاربر (ردیف کامل محتوا)
+     * برای لیست علاقه‌مندی‌ها در اپ
+     */
+    public function getFavoriteContents(int $userId): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT c.*
+             FROM `favorite` f
+             INNER JOIN `contents` c ON c.id = f.content_id
+             WHERE f.user_id = ?
+             ORDER BY f.id DESC'
+        );
+        $stmt->execute([$userId]);
+        return $stmt->fetchAll();
+    }
+
 
     public function insertFavorite(int $contentId, int $userId): array
     {
@@ -419,15 +526,68 @@ class DB_Functions
         $stmt->execute([$key]);
     }
 
+    // ================== نسخه پرو (Premium) ==================
+
+    public function isPremium(int $userId): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT is_premium, premium_source, premium_at FROM `users` WHERE id = ? LIMIT 1'
+        );
+        $stmt->execute([$userId]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    /**
+     * فعال‌سازی نسخه پرو — idempotent
+     * (تکرار همان پرداخت، دوباره خطا نمی‌دهد؛ کلید یکتا external_ref کنترل می‌کند)
+     */
+    public function activatePremium(int $userId, string $source, string $externalRef): array
+    {
+        // ۱) source of truth: همیشه users آپدیت می‌شود (حتی اگر audit خراب باشد)
+        $stmt = $this->db->prepare(
+            'UPDATE `users` SET is_premium = 1, premium_source = ?, premium_at = NOW() WHERE id = ?'
+        );
+        $stmt->execute([$source, $userId]);
+
+        // ۲) audit row — best-effort؛ اگر جدول نباشد/تکراری باشد، بلاک نمی‌کند
+        try {
+            $stmt2 = $this->db->prepare(
+                'INSERT INTO `premium_activations` (`user_id`, `source`, `external_ref`)
+                 VALUES (?, ?, ?)'
+            );
+            $stmt2->execute([$userId, $source, $externalRef]);
+        } catch (Throwable $e) {
+            // 23000 = تکراری (قبلاً فعال)، 42S02 = جدول نیست — هر دو غیرمخرب
+            error_log('activatePremium audit insert (non-fatal): ' . $e->getMessage());
+        }
+
+        return ['error' => false, 'error_msg' => 'نسخه پرو با موفقیت فعال شد', 'already' => false];
+    }
+
     // ================== فایل‌های صوتی ==================
 
     public function deleteAudioFile(string $audioUrl): void
     {
-        $relative = str_replace(APP_BASE_URL . '/', '', $audioUrl);
-        $path     = dirname(__DIR__) . '/uploads/' . basename($relative);
+        $name = basename((string)(parse_url($audioUrl, PHP_URL_PATH) ?: $audioUrl));
+        if ($name === '') {
+            return;
+        }
 
-        if (is_file($path)) {
-            @unlink($path);
+        // ویس‌ها در uploads/songs ذخیره می‌شوند؛
+        // مسیرهای قدیمی (بدون songs) هم چک می‌شوند برای فایل‌های قبلی
+        $candidates = [
+            dirname(dirname(__DIR__)) . '/uploads/songs/' . $name,
+            dirname(__DIR__) . '/uploads/songs/' . $name,
+            dirname(__DIR__) . '/uploads/' . $name,
+            dirname(dirname(__DIR__)) . '/uploads/' . $name,
+        ];
+
+        foreach ($candidates as $path) {
+            if (is_file($path)) {
+                @unlink($path);
+                return;
+            }
         }
     }
 }
