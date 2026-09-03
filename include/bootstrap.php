@@ -57,6 +57,7 @@ set_exception_handler(function (Throwable $e) {
 
 require_once __DIR__ . '/DB.php';
 require_once __DIR__ . '/DB_Functions.php';
+require_once __DIR__ . '/CategoryNormalizer.php';
 require_once __DIR__ . '/BazaarClient.php';
 require_once __DIR__ . '/ZarinpalClient.php';
 
