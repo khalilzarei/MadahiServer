@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Aug 24, 2026 at 07:18 AM
+-- Generation Time: Sep 03, 2026 at 06:16 AM
 -- Server version: 10.6.28-MariaDB-log
 -- PHP Version: 8.4.24
 
@@ -123,6 +123,38 @@ CREATE TABLE `messages` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `premium_activations`
+--
+
+CREATE TABLE `premium_activations` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `source` varchar(20) NOT NULL,
+  `external_ref` varchar(190) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `premium_invoices`
+--
+
+CREATE TABLE `premium_invoices` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `amount` int(11) NOT NULL,
+  `authority` varchar(60) NOT NULL,
+  `ref_id` varchar(60) DEFAULT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'pending',
+  `source` varchar(20) NOT NULL DEFAULT 'zarinpal',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `request_log`
 --
 
@@ -147,7 +179,10 @@ CREATE TABLE `users` (
   `api_token_hash` char(64) DEFAULT NULL,
   `api_token_expires_at` datetime DEFAULT NULL,
   `create_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `update_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `update_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `is_premium` tinyint(1) NOT NULL DEFAULT 0,
+  `premium_source` varchar(20) DEFAULT NULL,
+  `premium_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -198,6 +233,22 @@ ALTER TABLE `favorite`
 --
 ALTER TABLE `messages`
   ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `premium_activations`
+--
+ALTER TABLE `premium_activations`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_ref` (`source`,`external_ref`),
+  ADD KEY `idx_premium_user` (`user_id`);
+
+--
+-- Indexes for table `premium_invoices`
+--
+ALTER TABLE `premium_invoices`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_authority` (`authority`),
+  ADD KEY `idx_invoice_user` (`user_id`,`status`);
 
 --
 -- Indexes for table `request_log`
@@ -256,6 +307,18 @@ ALTER TABLE `favorite`
 -- AUTO_INCREMENT for table `messages`
 --
 ALTER TABLE `messages`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `premium_activations`
+--
+ALTER TABLE `premium_activations`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `premium_invoices`
+--
+ALTER TABLE `premium_invoices`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
