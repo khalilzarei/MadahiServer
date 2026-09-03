@@ -7,7 +7,7 @@ require_method('POST');
 $user = require_auth();
 
 $db   = new DB_Functions();
-$data = $db->getUserFavorites((int)$user['id']);
+$data = $db->getFavoriteContents((int)$user['id']);
 
 json_response([
     'error'     => false,
