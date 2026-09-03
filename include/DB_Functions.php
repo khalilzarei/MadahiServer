@@ -565,6 +565,206 @@ class DB_Functions
         return ['error' => false, 'error_msg' => 'نسخه پرو با موفقیت فعال شد', 'already' => false];
     }
 
+    // ================== کتابچه (کتابخانه عمومی) ==================
+    // این متدها برای صفحه «کتابچه» اپ استفاده می‌شوند:
+    // دسته‌های هم‌نام از همه کاربران در یک گروه جمع می‌شوند و تعداد شعر هر گروه
+    // برگردانده می‌شود؛ سپس شعرهای هر گروه به‌همراه نام ناشر و سبک لیست می‌شوند.
+
+    /**
+     * عنوان «سبک» هر محتوا (نوحه / روضه / …)
+     * اول از جدول content_type خوانده می‌شود؛ اگر خالی بود از نقشه پیش‌فرض.
+     */
+    private function styleTitle(string $contentType): string
+    {
+        static $map = null;
+        if ($map === null) {
+            $map = ['0' => 'نوحه', '1' => 'روضه'];
+            try {
+                $stmt = $this->db->query('SELECT id, title FROM `content_type`');
+                foreach ($stmt->fetchAll() as $r) {
+                    $map[(string)$r['id']] = (string)$r['title'];
+                }
+            } catch (Throwable $e) {
+                // جدول content_type موجود نیست → نقشه پیش‌فرض کافی است
+            }
+        }
+
+        return $map[(string)$contentType] ?? '';
+    }
+
+    /**
+     * شناسه‌های همه دسته‌هایی که با دسته نماینده یک «گروه» هستند
+     * (نام نرمال‌شده برابر دارند).
+     */
+    private function libraryCategoryIds(int $categoryId): array
+    {
+        $rep = $this->getCategoryById($categoryId);
+        if ($rep === null) {
+            return [];
+        }
+
+        $key  = CategoryNormalizer::normalize((string)$rep['title']);
+        $stmt = $this->db->query('SELECT id, title FROM `categories`');
+        $ids  = [];
+        foreach ($stmt->fetchAll() as $c) {
+            if (CategoryNormalizer::normalize((string)$c['title']) === $key) {
+                $ids[] = (int)$c['id'];
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * گروه‌های کتابچه: نام نرمال‌شده → اطلاعات گروه (با تعداد شعر).
+     * فیلتر جستجو روی نام اصلی و نام نرمال‌شده اعمال می‌شود.
+     */
+    private function getLibraryGroups(string $q = ''): array
+    {
+        $stmt = $this->db->query(
+            'SELECT c.id, c.title, c.description, c.create_at,
+                    COUNT(co.id) AS poem_count
+             FROM `categories` c
+             LEFT JOIN `contents` co ON co.category_id = c.id
+             GROUP BY c.id, c.title, c.description, c.create_at
+             ORDER BY c.id ASC'
+        );
+        $rows = $stmt->fetchAll();
+
+        $normalizedQ = $q !== '' ? CategoryNormalizer::normalize($q) : '';
+
+        $groups = [];   // groupKey => group
+        foreach ($rows as $r) {
+            $title = (string)$r['title'];
+            $key   = CategoryNormalizer::normalize($title);
+
+            // جستجو: هم نام نرمال‌شده و هم نام اصلی
+            if ($normalizedQ !== ''
+                && mb_strpos($key, $normalizedQ) === false
+                && mb_strpos($title, $q) === false) {
+                continue;
+            }
+
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'id'          => (int)$r['id'],   // نماینده = قدیمی‌ترین دسته گروه
+                    'title'       => $key,            // نام کانونی نمایشی
+                    'description' => (string)$r['description'],
+                    'user_id'     => 0,
+                    'create_at'   => (string)$r['create_at'],
+                    'poem_count'  => 0,
+                    'group_key'   => $key,
+                ];
+            }
+
+            $groups[$key]['poem_count'] += (int)$r['poem_count'];
+        }
+
+        // مرتب‌سازی: اول تعداد شعر (نزولی)، بعد نام
+        usort($groups, static function (array $a, array $b): int {
+            if ($a['poem_count'] !== $b['poem_count']) {
+                return $b['poem_count'] <=> $a['poem_count'];
+            }
+
+            return strcmp($a['title'], $b['title']);
+        });
+
+        return array_values($groups);
+    }
+
+    /**
+     * دسته‌های کتابچه (گروه‌بندی‌شده) با صفحه‌بندی.
+     * هر آیتم شامل: id (نماینده)، title (نام کانونی)، poem_count و group_key
+     */
+    public function getLibraryCategories(string $q = '', int $page = 1, int $limit = 20): array
+    {
+        $groups = $this->getLibraryGroups($q);
+        $offset = ($page - 1) * $limit;
+
+        return array_slice($groups, $offset, $limit);
+    }
+
+    public function countLibraryCategories(string $q = ''): int
+    {
+        return count($this->getLibraryGroups($q));
+    }
+
+    /**
+     * شعرهای یک گروه در کتابچه (همه دسته‌های هم‌نام، از همه کاربران)
+     * به‌همراه نام ناشر (full_name) و سبک (style) — با صفحه‌بندی
+     */
+    public function getLibraryContents(int $categoryId, int $page = 1, int $limit = 20): array
+    {
+        $ids = $this->libraryCategoryIds($categoryId);
+        if ($ids === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $offset = ($page - 1) * $limit;
+
+        $stmt = $this->db->prepare(
+            'SELECT co.*, u.full_name AS publisher_name
+             FROM `contents` co
+             LEFT JOIN `users` u ON u.id = co.user_id
+             WHERE co.category_id IN (' . $placeholders . ')
+             ORDER BY co.id DESC
+             LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset
+        );
+        $stmt->execute($ids);
+
+        $items = $stmt->fetchAll();
+        foreach ($items as &$item) {
+            $item['content_type']   = (string)($item['content_type'] ?? '');
+            $item['style']          = $this->styleTitle($item['content_type']);
+        }
+        unset($item);
+
+        return $items;
+    }
+
+    public function countLibraryContents(int $categoryId): int
+    {
+        $ids = $this->libraryCategoryIds($categoryId);
+        if ($ids === []) {
+            return 0;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $this->db->prepare(
+            'SELECT COUNT(*) FROM `contents` WHERE category_id IN (' . $placeholders . ')'
+        );
+        $stmt->execute($ids);
+
+        return (int)$stmt->fetchColumn();
+    }
+
+    /**
+     * جزئیات یک شعر/محتوا با شناسه (برای صفحه جزئیات کتابچه)
+     * به‌همراه نام ناشر و سبک — بدون شرط مالکیت
+     */
+    public function getContentById(int $contentId): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT co.*, u.full_name AS publisher_name
+             FROM `contents` co
+             LEFT JOIN `users` u ON u.id = co.user_id
+             WHERE co.id = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$contentId]);
+
+        $row = $stmt->fetch();
+        if ($row === false) {
+            return null;
+        }
+
+        $row['content_type'] = (string)($row['content_type'] ?? '');
+        $row['style']        = $this->styleTitle($row['content_type']);
+
+        return $row;
+    }
+
     // ================== فایل‌های صوتی ==================
 
     public function deleteAudioFile(string $audioUrl): void
