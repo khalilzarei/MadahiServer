@@ -32,8 +32,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/login.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "login.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "login.php"
+              ]
             },
             "description": "ورود با شماره موبایل.\n\n**پاسخ موفق:**\n```json\n{\n  \"error\": false,\n  \"token\": \"64کاراکترتصادفی\",\n  \"user\": { \"id\": \"1\", \"full_name\": \"...\", \"mobile\": \"...\" },\n  \"categories\": [...],\n  \"favorites\": [...],\n  \"contents\": [...]\n}\n```\nتوکن به‌صورت خودکار در Environment ذخیره می‌شود."
           },
@@ -84,8 +89,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/register.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "register.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "register.php"
+              ]
             },
             "description": "ثبت‌نام کاربر جدید. اگر شماره تکراری باشد خطا برمی‌گردد."
           },
@@ -117,8 +127,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/getAppInfo.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "getAppInfo.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "getAppInfo.php"
+              ]
             },
             "description": "بدون نیاز به توکن. نسخه فعلی اپ و لینک دانلود را برمی‌گرداند."
           }
@@ -148,8 +163,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/getUserCategories.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "getUserCategories.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "getUserCategories.php"
+              ]
             },
             "description": "دسته‌بندی‌های کاربر جاری (شناسه کاربر از توکن خوانده می‌شود)."
           },
@@ -200,8 +220,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/insertCategory.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "insertCategory.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "insertCategory.php"
+              ]
             },
             "description": "افزودن دسته جدید. (فیلد `msg` هم برای سازگاری با اپ قدیمی پذیرفته می‌شود)"
           }
@@ -242,8 +267,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/updateCategory.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "updateCategory.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "updateCategory.php"
+              ]
             },
             "description": "فقط صاحب دسته می‌تواند ویرایش کند."
           }
@@ -274,8 +304,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/deleteCategory.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "deleteCategory.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "deleteCategory.php"
+              ]
             },
             "description": "حذف دسته + همه محتواهای آن + علاقه‌مندی‌ها + فایل‌های صوتی (تراکنشی)."
           }
@@ -311,8 +346,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/getContentWithCategory.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "getContentWithCategory.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "getContentWithCategory.php"
+              ]
             },
             "description": "محتواهای یک دسته برای کاربر جاری."
           },
@@ -379,8 +419,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/insertContent.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "insertContent.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "insertContent.php"
+              ]
             },
             "description": "افزودن محتوا. بررسی می‌شود که دسته متعلق به کاربر باشد (یا دسته عمومی)."
           }
@@ -432,8 +477,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/updateContent.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "updateContent.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "updateContent.php"
+              ]
             },
             "description": "فقط صاحب محتوا می‌تواند ویرایش کند. (content_type هم ذخیره می‌شود)"
           }
@@ -464,8 +514,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/deleteContent.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "deleteContent.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "deleteContent.php"
+              ]
             },
             "description": "فقط صاحب محتوا. فایل صوتی هم حذف می‌شود."
           }
@@ -495,8 +550,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/getUserFavorites.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "getUserFavorites.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "getUserFavorites.php"
+              ]
             },
             "description": "لیست علاقه‌مندی‌های کاربر جاری."
           }
@@ -527,8 +587,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/insertFavorite.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "insertFavorite.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "insertFavorite.php"
+              ]
             },
             "description": "اگر نبود اضافه می‌کند (action=added)، اگر بود حذف می‌کند (action=removed)."
           }
@@ -558,8 +623,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/getMessages.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "getMessages.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "getMessages.php"
+              ]
             },
             "description": "پیام‌های اپلیکیشن."
           }
@@ -590,17 +660,192 @@
                 {
                   "key": "audio",
                   "type": "file",
-                  "src": ["/path/to/your/style.mp3"],
+                  "src": [
+                    "/path/to/your/style.mp3"
+                  ],
                   "description": "فرمت‌های مجاز: mp3, m4a, ogg, aac, wav — حداکثر ۱۰ مگابایت"
                 }
               ]
             },
             "url": {
               "raw": "{{base_url}}/api/uploadAudio.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "uploadAudio.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "uploadAudio.php"
+              ]
             },
             "description": "آپلود فایل صوتی سبک برای یک محتوا.\n\n⚠️ قبل از ارسال، مسیر فایل صوتی را در بخش Body → فرم `audio` عوض کنید.\nپاسخ شامل `content.audio_url` است که لینک فایل آپلودی است."
+          }
+        }
+      ]
+    },
+    {
+      "name": "📚 کتابچه (کتابخانه عمومی)",
+      "item": [
+        {
+          "name": "دسته‌های کتابچه — گروه‌بندی‌شده (getLibraryCategories)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "type": "text",
+                  "description": "جستجو در نام گروه (اختیاری) — مثلاً: حسین"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/getLibraryCategories.php",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "getLibraryCategories.php"
+              ]
+            },
+            "description": "دسته‌های کتابچه با **گروه‌بندی نام‌های هم‌معنی**.\nمثلاً «امام حسین»، «حسین»، «حسین(ع)» و هر نامی که شامل «حسین» باشد، در یک گروه «امام حسین (ع)» نمایش داده می‌شود.\n«امام حسن» و «امام حسن عسکری» دو گروه جدا هستند.\n\nهر آیتم: `id` (نماینده گروه)، `title` (نام کانونی)، `poem_count` (تعداد شعر)، `group_key`.\n\n**پاسخ:**\n```json\n{\n  \"error\": false,\n  \"data\": [\n    {\"id\": 1, \"user_id\": 0, \"title\": \"امام حسین (ع)\",\n     \"description\": \"\", \"create_at\": \"2026-09-03\",\n     \"poem_count\": 12, \"group_key\": \"امام حسین (ع)\"}\n  ],\n  \"total\": 5, \"page\": 1, \"pages\": 1\n}\n```"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.error === false && json.data && json.data.length > 0) {",
+                  "    pm.environment.set('library_category_id', String(json.data[0].id));",
+                  "    console.log('✅ library_category_id = ' + json.data[0].id + ' (' + json.data[0].title + ')');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "شعرهای یک گروه کتابچه (getLibraryContents)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "category_id",
+                  "value": "{{library_category_id}}",
+                  "type": "text",
+                  "description": "شناسه نماینده گروه (از getLibraryCategories)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/getLibraryContents.php",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "getLibraryContents.php"
+              ]
+            },
+            "description": "لیست شعرهای یک گروه کتابچه (همه دسته‌های هم‌نام از همه کاربران) به‌همراه `publisher_name` (نام ناشر) و `style` (سبک: نوحه/روضه/...).\n\n**پاسخ:**\n```json\n{\n  \"error\": false,\n  \"data\": [\n    {\"id\": 12, \"category_id\": 1, \"user_id\": 3,\n     \"subject\": \"...\", \"answer\": \"...\", \"content\": \"...\",\n     \"content_type\": \"0\", \"audio_url\": null,\n     \"publisher_name\": \"علی محمدی\", \"style\": \"نوحه\"}\n  ],\n  \"total\": 3, \"page\": 1, \"pages\": 1\n}\n```"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.error === false && json.data && json.data.length > 0) {",
+                  "    pm.environment.set('library_content_id', String(json.data[0].id));",
+                  "    console.log('✅ library_content_id = ' + json.data[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "جزئیات یک شعر کتابچه (getContentWithId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "content_id",
+                  "value": "{{library_content_id}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/getContentWithId.php",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "getContentWithId.php"
+              ]
+            },
+            "description": "جزئیات کامل یک شعر با `publisher_name` و `style`.\n\n**پاسخ:**\n```json\n{\n  \"error\": false,\n  \"content\": {\"id\": 12, \"subject\": \"...\", \"content\": \"...\",\n               \"publisher_name\": \"علی محمدی\", \"style\": \"نوحه\"}\n}\n```"
           }
         }
       ]
@@ -640,8 +885,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/insertCrash.php",
-              "host": ["{{base_url}}"],
-              "path": ["api", "insertCrash.php"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "insertCrash.php"
+              ]
             },
             "description": "بدون نیاز به توکن (محدودیت ۲۰ درخواست در ساعت برای هر IP)."
           }
