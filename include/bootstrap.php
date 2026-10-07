@@ -36,18 +36,34 @@ defined('DB_PORT')      || define('DB_PORT', 3306);
 defined('APP_ENV')      || define('APP_ENV', 'production');
 defined('APP_BASE_URL') || define('APP_BASE_URL', 'https://madahinote.ir');
 
+// سیاست رمز عبور — حداقل طول (قابل بازنویسی در config.php)
+defined('PASSWORD_MIN_LENGTH') || define('PASSWORD_MIN_LENGTH', 6);
+
 // ---------- نمایش خطا فقط در محیط توسعه ----------
 if (APP_ENV === 'development') {
     ini_set('display_errors', '1');
 } else {
     ini_set('display_errors', '0');
     ini_set('log_errors', '1');
-    ini_set('error_log', __DIR__ . '/../logs/php-error.log');
+    $logDirectory = __DIR__ . '/../logs';
+    if (!is_dir($logDirectory)) {
+        @mkdir($logDirectory, 0750, true);
+    }
+    if (is_dir($logDirectory) && is_writable($logDirectory)) {
+        ini_set('error_log', $logDirectory . '/php-error.log');
+    }
 }
 
 // ---------- خطاهای مدیریت‌نشده به JSON تبدیل شوند ----------
 set_exception_handler(function (Throwable $e) {
-    error_log('API ERROR: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    error_log(sprintf(
+        "API UNCAUGHT EXCEPTION: %s: %s in %s:%d\nStack trace:\n%s",
+        get_class($e),
+        $e->getMessage(),
+        $e->getFile(),
+        $e->getLine(),
+        $e->getTraceAsString()
+    ));
     if (!headers_sent()) {
         http_response_code(500);
         header('Content-Type: application/json; charset=utf-8');
@@ -121,11 +137,12 @@ function json_response(array $data, int $code = 200): void
     exit;
 }
 
-function error_response(string $message, int $code = 200): void
+function error_response(string $message, int $code = 200, array $extra = []): void
 {
     // توجه: برای سازگاری با نسخه فعلی اپ (که کد وضعیت HTTP را نمی‌خواند)
     // پیش‌فرض 200 است؛ بعد از آپدیت اپ می‌توانید کدهای واقعی (401, 429, ...) بدهید.
-    json_response(['error' => true, 'error_msg' => $message], $code);
+    // $extra برای فرستادن فیلدهای ماشین‌خوان (مثل code) به اپ استفاده می‌شود.
+    json_response(['error' => true, 'error_msg' => $message] + $extra, $code);
 }
 
 function require_method(string $method): void
@@ -163,9 +180,27 @@ function require_auth(): array
         error_response('نشست شما معتبر نیست؛ دوباره وارد شوید');
     }
 
+    // کاربرانی که هنوز رمز اولیه (= شماره موبایل) را عوض نکرده‌اند،
+    // فقط به endpoint تغییر رمز دسترسی دارند؛ بقیهٔ APIها بسته می‌ماند.
+    if (!empty($user['must_change_password']) && !current_script_allows_pending_password()) {
+        error_response(
+            'برای ادامه باید رمز عبور خود را تغییر دهید',
+            200,
+            ['code' => 'PASSWORD_CHANGE_REQUIRED', 'must_change_password' => true]
+        );
+    }
+
     // تمدید خودکار نشست (۳۰ روز از آخرین استفاده)
     $db->refreshTokenExpiry((int)$user['id']);
     return $user;
+}
+
+/**
+ * فقط اسکریپت تغییر رمز عبور می‌تواند با پرچم «الزام تغییر رمز» کار کند.
+ */
+function current_script_allows_pending_password(): bool
+{
+    return basename((string)($_SERVER['SCRIPT_NAME'] ?? '')) === 'changePassword.php';
 }
 
 // ============================================================
@@ -200,6 +235,15 @@ function require_premium(): array
         error_response('این قابلیت در نسخه پرو در دسترس است');
     }
 
+    return $user;
+}
+
+function require_admin(): array
+{
+    $user = require_auth();
+    if (empty($user['is_admin'])) {
+        error_response('دسترسی مدیر لازم است', 403);
+    }
     return $user;
 }
 

@@ -7,6 +7,12 @@ declare(strict_types=1);
  */
 class DB_Functions
 {
+    /**
+     * هش ساختگی برای یکسان‌کردن زمان پاسخ وقتی شماره موبایل وجود ندارد؛
+     * از تشخیص وجود حساب با اندازه‌گیری زمان جلوگیری می‌کند.
+     */
+    private const DUMMY_PASSWORD_HASH = '$2y$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpDLRmSbHvS1lVhQ2Xlq0K1nBqX1e';
+
     private PDO $db;
 
     public function __construct()
@@ -77,25 +83,167 @@ class DB_Functions
         $stmt->execute([$userId]);
     }
 
-    public function loginByMobile(string $mobile): array
+    public function loginByMobile(string $mobile, string $password): array
+    {
+        $user = $this->getUserByMobile($mobile);
+        if ($user === null) {
+            // یک password_verify ساختگی تا زمان پاسخ برای «شمارهٔ ناموجود» و
+            // «رمز اشتباه» یکسان بماند و از تشخیص وجود حساب با timing جلوگیری شود.
+            password_verify($password, self::DUMMY_PASSWORD_HASH);
+            return ['error' => true, 'error_msg' => 'کاربری با این شماره وجود ندارد لطفا ثبت نام کنید.'];
+        }
+
+        if (!$this->verifyPassword($user, $password)) {
+            return ['error' => true, 'error_msg' => 'رمز عبور اشتباه است'];
+        }
+
+        return $this->issueLoginPayload((int)$user['id'], $mobile);
+    }
+
+    /**
+     * ورود مدیر بدون رمز عبور — فقط برای adminLogin.php.
+     * ⚠️ این مسیر احراز هویت ضعیف‌تری دارد و به‌صورت آگاهانه نگه داشته شده است.
+     */
+    public function loginAdminByMobile(string $mobile): array
     {
         $user = $this->getUserByMobile($mobile);
         if ($user === null) {
             return ['error' => true, 'error_msg' => 'کاربری با این شماره وجود ندارد لطفا ثبت نام کنید.'];
         }
 
-        $token = $this->issueToken((int)$user['id']);
+        return $this->issueLoginPayload((int)$user['id'], $mobile);
+    }
+
+    /**
+     * صدور توکن و ساخت پاسخ ورود (مشترک بین ورود عادی و ورود مدیر).
+     */
+    private function issueLoginPayload(int $userId, string $mobile): array
+    {
+        $token = $this->issueToken($userId);
         $user  = $this->getUserByMobile($mobile);
 
+        if ($user === null) {
+            return ['error' => true, 'error_msg' => 'کاربری با این شماره وجود ندارد لطفا ثبت نام کنید.'];
+        }
+
         return [
-            'error'      => false,
-            'error_msg'  => 'شما با موفقیت وارد شدید.',
-            'token'      => $token,
-            'user'       => $this->sanitizeUser($user),
-            'categories' => $this->getUserCategories((int)$user['id']),
-            'favorites'  => $this->getUserFavorites((int)$user['id']),
-            'contents'   => $this->getUserContents((int)$user['id']),
+            'error'                => false,
+            'error_msg'            => 'شما با موفقیت وارد شدید.',
+            'token'                => $token,
+            'must_change_password' => !empty($user['must_change_password']),
+            'user'                 => $this->sanitizeUser($user),
+            'categories'           => $this->getUserCategories($userId),
+            'favorites'            => $this->getUserFavorites($userId),
+            'contents'             => $this->getUserContents($userId),
         ];
+    }
+
+    // ================== رمز عبور ==================
+
+    /**
+     * بررسی رمز عبور کاربر؛ در صورت نیاز هش را هم به‌روز می‌کند.
+     */
+    private function verifyPassword(array $user, string $password): bool
+    {
+        $hash = (string)($user['password'] ?? '');
+        if ($hash === '' || !password_verify($password, $hash)) {
+            return false;
+        }
+
+        if (password_needs_rehash($hash, PASSWORD_DEFAULT)) {
+            $stmt = $this->db->prepare('UPDATE `users` SET password = ? WHERE id = ?');
+            $stmt->execute([password_hash($password, PASSWORD_DEFAULT), (int)$user['id']]);
+        }
+
+        return true;
+    }
+
+    public function getUserById(int $userId): ?array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM `users` WHERE id = ? LIMIT 1');
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+        return $user ?: null;
+    }
+
+    /**
+     * سیاست رمز عبور. در صورت قبول، null برمی‌گرداند.
+     */
+    public function passwordPolicyError(string $newPassword, string $mobile): ?string
+    {
+        $minLength = (int)PASSWORD_MIN_LENGTH;
+
+        if (mb_strlen($newPassword) < $minLength) {
+            return 'رمز عبور باید حداقل ' . self::toPersianDigits((string)$minLength) . ' کاراکتر باشد';
+        }
+        if (mb_strlen($newPassword) > 100) {
+            return 'رمز عبور خیلی طولانی است';
+        }
+        if ($newPassword === $mobile) {
+            return 'رمز عبور نباید همان شماره موبایل باشد';
+        }
+
+        return null;
+    }
+
+    /**
+     * اعداد لاتین را فارسی می‌کند تا پیام‌ها با بقیهٔ متن فارسی هم‌شکل باشند.
+     */
+    private static function toPersianDigits(string $value): string
+    {
+        return strtr(
+            $value,
+            ['0' => '۰', '1' => '۱', '2' => '۲', '3' => '۳', '4' => '۴',
+             '5' => '۵', '6' => '۶', '7' => '۷', '8' => '۸', '9' => '۹']
+        );
+    }
+
+    /**
+     * تغییر رمز عبور کاربر احراز‌هویت‌شده و برداشتن پرچم «الزام تغییر رمز».
+     */
+    public function changePassword(int $userId, string $currentPassword, string $newPassword): array
+    {
+        $user = $this->getUserById($userId);
+        if ($user === null) {
+            return ['error' => true, 'error_msg' => 'کاربر یافت نشد'];
+        }
+
+        if (!$this->verifyPassword($user, $currentPassword)) {
+            return ['error' => true, 'error_msg' => 'رمز عبور فعلی اشتباه است'];
+        }
+
+        $newPassword = trim($newPassword);
+
+        $policyError = $this->passwordPolicyError($newPassword, (string)($user['mobile'] ?? ''));
+        if ($policyError !== null) {
+            return ['error' => true, 'error_msg' => $policyError];
+        }
+
+        if (password_verify($newPassword, (string)($user['password'] ?? ''))) {
+            return ['error' => true, 'error_msg' => 'رمز عبور جدید نباید با رمز فعلی یکسان باشد'];
+        }
+
+        // رمز جدید و برداشتن پرچم باید با هم و در یک تراکنش اعمال شوند؛
+        // در غیر این صورت ممکن است کاربر رمز عوض کند ولی همچنان قفل بماند.
+        try {
+            $this->db->beginTransaction();
+
+            $stmt = $this->db->prepare(
+                'UPDATE `users`
+                 SET password = ?, must_change_password = 0, update_at = NOW()
+                 WHERE id = ?'
+            );
+            $stmt->execute([password_hash($newPassword, PASSWORD_DEFAULT), $userId]);
+
+            $this->db->commit();
+        } catch (PDOException) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            return ['error' => true, 'error_msg' => 'تغییر رمز عبور ناموفق بود؛ دوباره تلاش کنید'];
+        }
+
+        return ['error' => false, 'error_msg' => 'رمز عبور با موفقیت تغییر کرد.'];
     }
 
     public function register(string $mobile, string $fullName): array
@@ -104,17 +252,14 @@ class DB_Functions
             return ['error' => true, 'error_msg' => 'این کاربر قبلا ثبت نام کرده است'];
         }
 
-        // فعلاً ورود با رمز نداریم؛ یک رمز تصادفی هش‌شده ذخیره می‌شود
-        // (زمانی که OTP یا رمز اضافه شد، همین فیلد استفاده می‌شود)
-        $randomPassword = bin2hex(random_bytes(8));
-
+        // رمز اولیه = شماره موبایل؛ کاربر در اولین ورود مجبور به تغییر آن است.
         $stmt = $this->db->prepare(
-            'INSERT INTO `users` (`full_name`, `password`, `email`, `mobile`, `create_at`, `update_at`)
-             VALUES (?, ?, \'\', ?, NOW(), NOW())'
+            'INSERT INTO `users` (`full_name`, `password`, `must_change_password`, `email`, `mobile`, `create_at`, `update_at`)
+             VALUES (?, ?, 1, \'\', ?, NOW(), NOW())'
         );
 
         try {
-            $stmt->execute([$fullName, password_hash($randomPassword, PASSWORD_DEFAULT), $mobile]);
+            $stmt->execute([$fullName, password_hash($mobile, PASSWORD_DEFAULT), $mobile]);
         } catch (PDOException) {
             // خطای ایندکس یکتا (ثبت‌نام همزمان با همان شماره)
             return ['error' => true, 'error_msg' => 'این کاربر قبلا ثبت نام کرده است'];
@@ -125,20 +270,88 @@ class DB_Functions
         $user   = $this->getUserByMobile($mobile);
 
         return [
-            'error'      => false,
-            'error_msg'  => 'ثبت نام با موفقیت انجام شد.',
-            'token'      => $token,
-            'user'       => $this->sanitizeUser($user),
-            'categories' => [],
-            'favorites'  => [],
-            'contents'   => [],
+            'error'                => false,
+            'error_msg'            => 'ثبت نام با موفقیت انجام شد.',
+            'token'                => $token,
+            'must_change_password' => true,
+            'user'                 => $this->sanitizeUser($user),
+            'categories'           => [],
+            'favorites'            => [],
+            'contents'             => [],
         ];
     }
 
     private function sanitizeUser(array $user): array
     {
         unset($user['password'], $user['api_token_hash'], $user['api_token_expires_at']);
+
+        // به‌صورت بولین واقعی در JSON فرستاده شود تا اپ عدد/رشته نگیرد
+        if (array_key_exists('must_change_password', $user)) {
+            $user['must_change_password'] = !empty($user['must_change_password']);
+        }
+
         return $user;
+    }
+
+    public function getAdminUsers(int $limit, int $offset, string $mobileSearch = ''): array
+    {
+        // limit/offset are clamped by adminGetUsers.php to positive integers.
+        // Interpolate these validated integers instead of binding them in LIMIT;
+        // some PDO/MySQL combinations reject native bound parameters there.
+        $limit = max(1, min(100, $limit));
+        $offset = max(0, $offset);
+        $columns = 'SELECT id, full_name, mobile, email, is_premium, premium_source, premium_at, create_at, update_at FROM `users`';
+        if ($mobileSearch !== '') {
+            $stmt = $this->db->prepare(
+                $columns . ' WHERE mobile LIKE ? ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
+            );
+            $stmt->bindValue(1, '%' . $mobileSearch . '%', PDO::PARAM_STR);
+            $stmt->execute();
+            $users = $stmt->fetchAll();
+        } else {
+            $stmt = $this->db->query(
+                $columns . ' ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
+            );
+            $users = $stmt->fetchAll();
+        }
+
+        foreach ($users as &$user) {
+            $user['id'] = (int)$user['id'];
+            $user['is_premium'] = (bool)$user['is_premium'];
+        }
+        unset($user);
+        return $users;
+    }
+
+    public function countAdminUsers(string $mobileSearch = ''): int
+    {
+        if ($mobileSearch === '') {
+            return (int)$this->db->query('SELECT COUNT(*) FROM `users`')->fetchColumn();
+        }
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM `users` WHERE mobile LIKE ?');
+        $stmt->execute(['%' . $mobileSearch . '%']);
+        return (int)$stmt->fetchColumn();
+    }
+
+    public function setUserPremium(int $userId, bool $isPremium): bool
+    {
+        $stmt = $this->db->prepare(
+            'UPDATE `users` SET is_premium = ?, premium_source = ?, premium_at = ? WHERE id = ?'
+        );
+        $stmt->execute([
+            $isPremium ? 1 : 0,
+            $isPremium ? 'admin' : null,
+            $isPremium ? date('Y-m-d H:i:s') : null,
+            $userId,
+        ]);
+        return $stmt->rowCount() > 0 || $this->userExists($userId);
+    }
+
+    private function userExists(int $userId): bool
+    {
+        $stmt = $this->db->prepare('SELECT 1 FROM `users` WHERE id = ? LIMIT 1');
+        $stmt->execute([$userId]);
+        return (bool)$stmt->fetchColumn();
     }
 
     // ================== دسته‌بندی‌ها ==================
@@ -331,6 +544,22 @@ class DB_Functions
     {
         $stmt = $this->db->prepare('UPDATE `contents` SET audio_url = ? WHERE id = ?');
         $stmt->execute([$audioUrl, $contentId]);
+    }
+
+    public function removeContentAudio(int $userId, int $contentId): array
+    {
+        $content = $this->getContentWithUserIdAndId($userId, $contentId);
+        if ($content === null) {
+            return ['success' => false, 'message' => 'محتوا یافت نشد یا متعلق به شما نیست'];
+        }
+
+        $stmt = $this->db->prepare('UPDATE `contents` SET audio_url = NULL WHERE id = ?');
+        $stmt->execute([$contentId]);
+        if (!empty($content['audio_url'])) {
+            $this->deleteAudioFile($content['audio_url']);
+        }
+
+        return ['success' => true, 'message' => 'ویس با موفقیت حذف شد'];
     }
 
     /**

@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 /**
- * لیست شعرهای یک دسته در کتابچه با صفحه‌بندی
- * ورودی: category_id، page، limit
+ * لیست شعرهای یک دسته در کتابچه با صفحه‌بندی و جستجو
+ * ورودی: category_id، q (جستجو، اختیاری)، page، limit
  * خروجی: { error, data: [...], total, page, pages }
  */
 require_once __DIR__ . '/../include/bootstrap.php';
@@ -12,6 +12,7 @@ require_method('POST');
 require_auth();
 
 $categoryId = (int)($_POST['category_id'] ?? 0);
+$q          = trim((string)($_POST['q'] ?? ''));
 $page       = max(1, (int)($_POST['page'] ?? 1));
 $limit      = (int)($_POST['limit'] ?? 20);
 if ($limit < 1)   { $limit = 20; }
@@ -23,8 +24,8 @@ if ($categoryId <= 0) {
 
 $db = new DB_Functions();
 
-$items = $db->getLibraryContents($categoryId, $page, $limit);
-$total = $db->countLibraryContents($categoryId);
+$items = $db->getLibraryContents($categoryId, $page, $limit, $q);
+$total = $db->countLibraryContents($categoryId, $q);
 
 json_response([
     'error'     => false,
