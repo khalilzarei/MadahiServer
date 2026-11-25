@@ -13,6 +13,15 @@ class DB_Functions
      */
     private const DUMMY_PASSWORD_HASH = '$2y$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpDLRmSbHvS1lVhQ2Xlq0K1nBqX1e';
 
+    /**
+     * شناسهٔ دستهٔ «اطلاع‌رسانی آپدیت اجباری» که فقط باید به کاربران
+     * اپ قدیمی (API قدیمی madahinote.ir/api) نشان داده شود.
+     * اپ قدیمی دسته‌های user_id=0 را می‌بیند؛ این API آن را فیلتر می‌کند
+     * تا کاربران نسخهٔ جدید با این دستهٔ اطلاع‌رسانی مواجه نشوند.
+     * بعد از پایان دورهٔ مهاجرت، ردیف را از DB حذف و این ثابت را بردارید.
+     */
+    private const MIGRATION_NOTICE_CATEGORY_ID = 900001;
+
     private PDO $db;
 
     public function __construct()
@@ -101,14 +110,19 @@ class DB_Functions
     }
 
     /**
-     * ورود مدیر بدون رمز عبور — فقط برای adminLogin.php.
-     * ⚠️ این مسیر احراز هویت ضعیف‌تری دارد و به‌صورت آگاهانه نگه داشته شده است.
+     * ورود مدیر با رمز عبور — فقط برای adminLogin.php.
+     * امنیت مشابه login عادی؛ بعد از آن مسئله is_admin در کنترلر چک می‌شود.
      */
-    public function loginAdminByMobile(string $mobile): array
+    public function loginAdminByMobile(string $mobile, string $password): array
     {
         $user = $this->getUserByMobile($mobile);
         if ($user === null) {
+            password_verify($password, self::DUMMY_PASSWORD_HASH);
             return ['error' => true, 'error_msg' => 'کاربری با این شماره وجود ندارد لطفا ثبت نام کنید.'];
+        }
+
+        if (!$this->verifyPassword($user, $password)) {
+            return ['error' => true, 'error_msg' => 'رمز عبور اشتباه است'];
         }
 
         return $this->issueLoginPayload((int)$user['id'], $mobile);
@@ -260,9 +274,15 @@ class DB_Functions
 
         try {
             $stmt->execute([$fullName, password_hash($mobile, PASSWORD_DEFAULT), $mobile]);
-        } catch (PDOException) {
+        } catch (PDOException $e) {
+            // خطای واقعی را لاگ کن تا مشکل اسکیما (مثل نبود ستون must_change_password)
+            // با پیام گمراه‌کننده‌ی «قبلا ثبت‌نام کرده» پنهان نشود
+            error_log('register INSERT failed: ' . $e->getMessage());
             // خطای ایندکس یکتا (ثبت‌نام همزمان با همان شماره)
-            return ['error' => true, 'error_msg' => 'این کاربر قبلا ثبت نام کرده است'];
+            if ((int)($e->errorInfo[1] ?? 0) === 1062) {
+                return ['error' => true, 'error_msg' => 'این کاربر قبلا ثبت نام کرده است'];
+            }
+            return ['error' => true, 'error_msg' => 'خطای سرور هنگام ثبت‌نام؛ لطفاً کمی بعد تلاش کنید'];
         }
 
         $userId = (int)$this->db->lastInsertId();
@@ -358,8 +378,13 @@ class DB_Functions
 
     public function getUserCategories(int $userId): array
     {
+        // دستهٔ اطلاع‌رسانی آپدیت (user_id=0) فقط برای اپ قدیمی است؛
+        // کاربران نسخهٔ جدید نباید آن را ببینند
         $stmt = $this->db->prepare(
-            'SELECT * FROM `categories` WHERE user_id = ? OR user_id = 0 ORDER BY id DESC'
+            'SELECT * FROM `categories`
+             WHERE (user_id = ? OR user_id = 0)
+               AND id <> ' . self::MIGRATION_NOTICE_CATEGORY_ID . '
+             ORDER BY id DESC'
         );
         $stmt->execute([$userId]);
         return $stmt->fetchAll();
@@ -468,6 +493,52 @@ class DB_Functions
         return $stmt->fetchAll();
     }
 
+    /**
+     * جستجو در شعرهای کاربر (دفترچه) — روی فیلدهای subject/content/answer.
+     *
+     *  - جستجوی چندکلمه‌ای: query به توکن‌ها (بر اساس فاصله) شکسته می‌شود و
+     *    هر توکن جداگانه با AND ترکیب می‌گردد؛ یعنی «دل گرفته» حتی عبارت
+     *    «دل من گرفته» را هم پیدا می‌کند (هر ترتیب و مکانی در متن).
+     *  - نسخه‌سازی حروف: ی/ي و ک/ك عربی-فارسی یکی حساب می‌شوند.
+     *  - wildcardها و کاراکترهای غیرحرف/عدد حذف می‌شوند تا regex سالم بماند.
+     */
+    public function searchContents(int $userId, string $query): array
+    {
+        $tokens = preg_split('/\s+/u', trim($query)) ?: [];
+        $tokens = array_values(array_filter(array_map(
+            static fn(string $t): string => (string)preg_replace('/[^\p{L}\p{N}]/u', '', $t),
+            $tokens
+        ), static fn(string $t): bool => $t !== ''));
+
+        if ($tokens === []) {
+            return [];
+        }
+
+        $conditions = [];
+        $params     = [$userId];
+
+        foreach ($tokens as $token) {
+            // variants: ی/ي و ک/ك هر دو پوشش داده شوند
+            $pattern = str_replace(['ی', 'ي'], '[یي]', $token);
+            $pattern = str_replace(['ک', 'ك'], '[کك]', $pattern);
+
+            $conditions[] = '(`subject` REGEXP ? OR `content` REGEXP ? OR `answer` REGEXP ?)';
+            $params[] = $pattern;
+            $params[] = $pattern;
+            $params[] = $pattern;
+        }
+
+        $sql = 'SELECT * FROM `contents`
+                WHERE `user_id` = ?
+                  AND ' . implode(' AND ', $conditions) . '
+                ORDER BY `id` DESC
+                LIMIT 100';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
     public function getContentWithUserIdAndId(int $userId, int $contentId): ?array
     {
         $stmt = $this->db->prepare('SELECT * FROM `contents` WHERE id = ? AND user_id = ? LIMIT 1');
@@ -502,10 +573,19 @@ class DB_Functions
             return ['error' => true, 'error_msg' => 'محتوا یافت نشد یا متعلق به شما نیست', 'content' => null];
         }
 
-        $stmt = $this->db->prepare(
-            'UPDATE `contents` SET answer = ?, content = ?, subject = ?, content_type = ? WHERE id = ?'
-        );
-        $stmt->execute([$answer, $content, $subject, $contentType, $contentId]);
+        // content_type = -1 یعنی «تغییر نده» — برای کلاینت‌هایی که این فیلد را
+        // ارسال نمی‌کنند (نسخه‌های قدیمی اپ) تا نوع محتوا ریست نشود
+        if ($contentType >= 0) {
+            $stmt = $this->db->prepare(
+                'UPDATE `contents` SET answer = ?, content = ?, subject = ?, content_type = ? WHERE id = ?'
+            );
+            $stmt->execute([$answer, $content, $subject, $contentType, $contentId]);
+        } else {
+            $stmt = $this->db->prepare(
+                'UPDATE `contents` SET answer = ?, content = ?, subject = ? WHERE id = ?'
+            );
+            $stmt->execute([$answer, $content, $subject, $contentId]);
+        }
 
         $updated = $this->getContentWithUserIdAndId($userId, $contentId);
         return ['error' => false, 'error_msg' => ($updated['subject'] ?? '') . ' با موفقیت ویرایش شد', 'content' => $updated];
@@ -740,12 +820,16 @@ class DB_Functions
 
     public function countRequests(string $key, int $windowSeconds): int
     {
-        $cutoff = gmdate('Y-m-d H:i:s', time() - $windowSeconds);
-
+        // ⚠️ رفع باگ: قبلاً cutoff با gmdate (UTC) ساخته می‌شد ولی created_at
+        // با زمان محلی MySQL (تهران) ذخیره می‌شود؛ اختلاف ۳.۵ ساعتی باعث
+        // می‌شد پنجره‌ی ریت‌لیمیت ~۳.۵ ساعت طولانی‌تر از مقدار واقعی باشد
+        // و کاربران ساعت‌ها خطای «درخواست بیش از حد» ببینند.
+        // محاسبه‌ی cutoff به خود دیتابیس سپرده می‌شود تا همیشه هم‌راستا باشد.
         $stmt = $this->db->prepare(
-            'SELECT COUNT(*) AS c FROM `request_log` WHERE request_key = ? AND created_at >= ?'
+            'SELECT COUNT(*) AS c FROM `request_log`
+             WHERE request_key = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? SECOND)'
         );
-        $stmt->execute([$key, $cutoff]);
+        $stmt->execute([$key, $windowSeconds]);
         return (int)$stmt->fetch()['c'];
     }
 

@@ -267,3 +267,25 @@ function normalizeMobile(string $mobile): string
     }
     return $mobile;
 }
+
+// ============================================================
+// post_text — خواندن فیلدهای متنی با پشتیبانی Base64
+// ------------------------------------------------------------
+// چرا؟ برخی هاست‌ها (ModSecurity/Imunify360) بدنه‌ی POST حاوی
+// تگ <p>، عبارات عربی یا الگوهای خاص را با HTTP 403 بلاک می‌کنند
+// و درخواست اصلاً به PHP نمی‌رسد. اپ متن‌های بلند (موضوع/پاسخ/متن)
+// را base64 می‌فرستد (فیلد name_b64) تا فایروال الگویی نبیند.
+// سازگاری: اگر فیلد b64 نبود، همان فیلد خام خوانده می‌شود
+// تا کلاینت‌های قدیمی نشکنند.
+// ============================================================
+function post_text(string $name): string
+{
+    $encoded = $_POST[$name . '_b64'] ?? null;
+    if (is_string($encoded) && $encoded !== '') {
+        $decoded = base64_decode($encoded, true);
+        if ($decoded !== false) {
+            return $decoded;
+        }
+    }
+    return (string)($_POST[$name] ?? '');
+}

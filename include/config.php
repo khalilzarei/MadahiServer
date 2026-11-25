@@ -17,7 +17,9 @@ const DB_PASS = '@65877856.com';
 
 
 // آدرس پایه اپ (بدون اسلش انتهایی)
-const APP_BASE_URL = 'https://madahinote.ir';
+// ⚠️ باید با BASE_URL داخل اپ یکی باشد — اپ به ساب‌دامین api. می‌زند؛
+// اگر این مقدار با هاست واقعی API یکی نباشد، لینک فایل‌های صوتی ۴۰۴ می‌شود
+const APP_BASE_URL = 'https://api.madahinote.ir';
 
 // 'production' یا 'development' (نمایش خطاها فقط در development)
 const APP_ENV = 'production';

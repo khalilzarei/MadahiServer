@@ -6,9 +6,10 @@ require_method('POST');
 
 $user        = require_auth();
 $categoryId  = (int)($_POST['category_id'] ?? 0);
-$subject     = trim((string)($_POST['subject'] ?? ''));
-$answer      = trim((string)($_POST['answer'] ?? ''));
-$content     = trim((string)($_POST['content'] ?? ''));
+// ⚠️ فیلدهای متنی ممکن است base64 ارسال شده باشند (عبور از فایروال هاست)
+$subject     = trim(post_text('subject'));
+$answer      = trim(post_text('answer'));
+$content     = trim(post_text('content'));
 $contentType = (int)($_POST['content_type'] ?? 0);
 
 if ($categoryId <= 0 || $subject === '' || $content === '') {

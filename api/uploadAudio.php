@@ -69,28 +69,17 @@ if (!$isAudio) {
 }
 
 // ============================================================
-// انتخاب پوشه‌ی آپلود
+// پوشه‌ی آپلود — همیشه داخل ریشه‌ی اپ
 // ------------------------------------------------------------
-// ۱) اولویت: public_html/uploads/songs/
-//    → لینک: https://دامنه/uploads/songs/...
-// ۲) اگر در دسترس نبود: ریشه‌ی اپ/uploads/songs/
-//    → لینک با مسیر عمومی واقعی
+// ⚠️ رفع باگ: نسخه‌ی قبلی ابتدا «یک پوشه بالاتر از اپ» را امتحان
+// می‌کرد؛ روی بیشتر هاست‌ها آن مسیر بیرون از ریشه‌ی وب است ولی
+// قابل‌نوشتن، پس فایل‌ها جایی ذخیره می‌شدند که از وب دیده نمی‌شوند
+// و لینک برگشتی ۴۰۴ بود (ویس «آپلود می‌شد ولی پخش نمی‌شد»).
+// ریشه‌ی اپ همان docroot عمومی است (public_html یا ریشه‌ی
+// ساب‌دامین api.madahinote.ir) پس همان‌جا ذخیره می‌کنیم.
 // ============================================================
-$appRoot = dirname(__DIR__);
-$docRoot = dirname($appRoot);
-$docUploads = $docRoot . '/uploads/songs';
-
-$useDocRootUploads = false;
-if (is_dir($docUploads) && is_writable($docUploads)) {
-    $useDocRootUploads = true;
-} else {
-    @mkdir($docUploads, 0755, true);
-    if (is_dir($docUploads) && is_writable($docUploads)) {
-        $useDocRootUploads = true;
-    }
-}
-
-$uploadDir = $useDocRootUploads ? $docUploads . '/' : $appRoot . '/uploads/songs/';
+$appRoot   = dirname(__DIR__);
+$uploadDir = $appRoot . '/uploads/songs/';
 if (!is_dir($uploadDir)) {
     @mkdir($uploadDir, 0755, true);
 }
@@ -161,8 +150,13 @@ if (!rename($finalPath, $destPath) && !copy($finalPath, $destPath)) {
 @unlink($finalPath);
 @chmod($destPath, 0644);
 
-$audioUrl = ($useDocRootUploads ? APP_BASE_URL : (APP_BASE_URL . public_web_root()))
-    . '/uploads/songs/' . $newName;
+// ⚠️ رفع باگ: لینک از هاستِ همین درخواست ساخته می‌شود تا با هر دیپلوی
+// (دامنه‌ی اصلی madahinote.ir یا ساب‌دامین api.madahinote.ir) درست باشد.
+// نسخه‌ی قبلی همیشه APP_BASE_URL را می‌چسباند و چون اپ به ساب‌دامین
+// api. می‌زند، لینک روی دامنه‌ی اشتباه ساخته می‌شد و ۴۰۴ می‌داد.
+$scheme   = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') ? 'https' : 'http';
+$host     = (string)($_SERVER['HTTP_HOST'] ?? (parse_url(APP_BASE_URL, PHP_URL_HOST) ?: ''));
+$audioUrl = $scheme . '://' . $host . public_web_root() . '/uploads/songs/' . $newName;
 
 // حذف فایل قبلی اگر سبک قبلی داشته
 if (!empty($content['audio_url'])) {
